@@ -2049,7 +2049,9 @@ func execute(gp *g, inheritTime bool) {
 	gp.preempt = false
 	gp.stackguard0 = gp.stack.lo + _StackGuard
 	if !inheritTime {
-		_g_.m.p.ptr().schedtick++
+		_p_ := _g_.m.p.ptr()
+		_p_.schedtick++
+		_p_.sysmontick.schedwhen = nanotime()
 	}
 
 	// Check whether the profiler needs to be turned on or off.
@@ -4556,7 +4558,6 @@ func sysmon() {
 }
 
 type sysmontick struct {
-	schedtick   uint32
 	schedwhen   int64
 	syscalltick uint32
 	syscallwhen int64
@@ -4586,11 +4587,7 @@ func retake(now int64) uint32 {
 		sysretake := false
 		if s == _Prunning || s == _Psyscall {
 			// Preempt G if it's running for too long.
-			t := int64(_p_.schedtick)
-			if int64(pd.schedtick) != t {
-				pd.schedtick = uint32(t)
-				pd.schedwhen = now
-			} else if pd.schedwhen+forcePreemptNS <= now {
+			if pd.schedwhen+forcePreemptNS <= now {
 				preemptone(_p_)
 				// In case of syscall, preemptone() doesn't
 				// work, because there is no M wired to P.
